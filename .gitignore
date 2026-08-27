@@ -1,0 +1,7 @@
+linux-6.1.6/
+linux-6.1.6.tar.xz
+*.o
+*.ko
+*.mod
+*.cmd
+.tmp_versions/
