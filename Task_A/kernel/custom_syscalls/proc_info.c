@@ -4,6 +4,7 @@
 #include <linux/pid.h> // find_vpid, pid_task
 #include <linux/uaccess.h> // copy_to_user, copy_from_user
 #include <linux/limits.h>    // ULLONG_MAX
+#include <linux/sched/signal.h>
 
 #define PROC_INFO_PID 1
 #define PROC_INFO_SYSTEM 2

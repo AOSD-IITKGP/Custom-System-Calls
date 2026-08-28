@@ -5,6 +5,7 @@
 #include <linux/uaccess.h>
 #include <linux/list.h>
 #include <linux/slab.h>
+#include <linux/sched/signal.h>
 #include "pid_ctxt_switch.h" // header file for pid_ctxt_switch struct
 
 
@@ -73,17 +74,21 @@ SYSCALL_DEFINE1(sys_fetch, struct pid_ctxt_switch __user *, stats){
 
     list_for_each_entry(entry, &monitored_list, next_prev_list){ 
         pid_t cur_pid = entry -> pid;
-        struct task_struct *task;
+
+        struct task_struct *task, *thread;
         task = pid_task(find_vpid(cur_pid), PIDTYPE_PID);
-    
         if(!task)
             continue; // move to the next process, if it is dead
 
-        entry->ninvctxt = task->nivcsw;
-        entry->nvctxt = task->nvcsw;
+        // add context switches from the entire thread group
+        for_each_thread(task, thread) {
+            global_tracker.tot_invctxt += thread->nivcsw;
+            global_tracker.tot_vctxt += thread->nvcsw;
 
-        global_tracker.tot_invctxt += task->nivcsw;
-        global_tracker.tot_vctxt += task->nvcsw;
+            // this step is not required
+            entry->ninvctxt += thread->nivcsw;
+            entry->nvctxt += thread->nvcsw;
+        }
     }
 
     if (copy_to_user(stats, &global_tracker, sizeof(struct pid_ctxt_switch)))
