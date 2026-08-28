@@ -43,7 +43,7 @@ SYSCALL_DEFINE4(proc_info, pid_t, pid, unsigned int, flags, char __user *, buffe
         if(!task) // task doesn't exist
             return -ESRCH;
         
-        char kernel_buf[1024];
+        char kernel_buf[2048];
         int len = 0;
 
         int n_child = 0;

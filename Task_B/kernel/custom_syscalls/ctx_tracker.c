@@ -24,7 +24,7 @@ int sys_register(pid_t pid): adds the supplied PID to the tail of the monitored 
 The system call shall verify that the PID is valid and that the corresponding process exists before adding it to the list.
 */
 
-SYSCALL_DEFINE1(register_pid, pid_t, pid){ // had to use register_pid since register is a keyword
+SYSCALL_DEFINE1(sys_register, pid_t, pid){ // had to use register_pid since register is a keyword
     if(pid < 1)
         return -EINVAL;
 
@@ -55,7 +55,7 @@ int sys_fetch(struct pid_ctxt_switch *stats): iterates through the monitored pro
 and involuntary context switch events. The resulting values shall be copied into the user-provided stats structure.
 */
 
-SYSCALL_DEFINE1(fetch, struct pid_ctxt_switch __user *, stats){
+SYSCALL_DEFINE1(sys_fetch, struct pid_ctxt_switch __user *, stats){
     if (!stats)
         return -EFAULT;
 
@@ -97,7 +97,7 @@ int sys_deregister(pid_t pid): searches the monitored process list for the sup
 plied PID and removes the corresponding node from the list
 */
 
-SYSCALL_DEFINE1(deregister, pid_t, pid){
+SYSCALL_DEFINE1(sys_deregister, pid_t, pid){
     if(pid < 1)
         return -EINVAL;
     struct pid_node *entry, *tmp;
