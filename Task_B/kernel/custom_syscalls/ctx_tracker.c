@@ -70,9 +70,9 @@ SYSCALL_DEFINE1(fetch, struct pid_ctxt_switch __user *, stats)
 
     list_for_each_entry(entry, &monitored_list, next_prev_list){ 
         pid_t cur_pid = entry -> pid;
-        struct task_struct *task;
+
+        struct task_struct *task, *thread;
         task = pid_task(find_vpid(cur_pid), PIDTYPE_PID);
-    
         if(!task)
             continue;
 
