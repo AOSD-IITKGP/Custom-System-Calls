@@ -5,10 +5,9 @@
 #include <linux/uaccess.h>
 #include <linux/list.h>
 #include <linux/slab.h>
-#include "pid_ctxt_switch.h" // header file for pid_ctxt_switch struct
+#include <linux/sched/signal.h>
+#include "pid_ctxt_switch.h"
 
-
-// define the structs as mentioned in the assignment
 struct pid_node{
     pid_t pid;
     unsigned long ninvctxt;
@@ -20,11 +19,11 @@ struct pid_node{
 static LIST_HEAD(monitored_list);
 
 /*
-int sys_register(pid_t pid): adds the supplied PID to the tail of the monitored process list. 
+int sys_register_pid(pid_t pid): adds the supplied PID to the tail of the monitored process list. 
 The system call shall verify that the PID is valid and that the corresponding process exists before adding it to the list.
 */
-
-SYSCALL_DEFINE1(sys_register, pid_t, pid){ // had to use register_pid since register is a keyword
+SYSCALL_DEFINE1(register_pid, pid_t, pid)
+{
     if(pid < 1)
         return -EINVAL;
 
@@ -44,7 +43,6 @@ SYSCALL_DEFINE1(sys_register, pid_t, pid){ // had to use register_pid since regi
     new_node->nvctxt = task -> nvcsw;
 
     // add the above as tail to the list
-    // NOTE (YESHEETH AND HADWIK): This is different from our usual linked list implementation, please look into this
     list_add_tail(&new_node->next_prev_list, &monitored_list);
 
     return 0;
@@ -54,8 +52,8 @@ SYSCALL_DEFINE1(sys_register, pid_t, pid){ // had to use register_pid since regi
 int sys_fetch(struct pid_ctxt_switch *stats): iterates through the monitored process list and obtains the cumulative number of voluntary 
 and involuntary context switch events. The resulting values shall be copied into the user-provided stats structure.
 */
-
-SYSCALL_DEFINE1(sys_fetch, struct pid_ctxt_switch __user *, stats){
+SYSCALL_DEFINE1(fetch, struct pid_ctxt_switch __user *, stats)
+{
     if (!stats)
         return -EFAULT;
 
@@ -68,7 +66,6 @@ SYSCALL_DEFINE1(sys_fetch, struct pid_ctxt_switch __user *, stats){
         member_name — the name of the list_head field inside your struct
     */
 
-    // the total involuntary and voluntary context switch tracker
     struct pid_ctxt_switch global_tracker = {0, 0};
 
     list_for_each_entry(entry, &monitored_list, next_prev_list){ 
@@ -77,13 +74,23 @@ SYSCALL_DEFINE1(sys_fetch, struct pid_ctxt_switch __user *, stats){
         task = pid_task(find_vpid(cur_pid), PIDTYPE_PID);
     
         if(!task)
-            continue; // move to the next process, if it is dead
+            continue;
 
-        entry->ninvctxt = task->nivcsw;
-        entry->nvctxt = task->nvcsw;
+        // loop through the main process AND all its threads
+        struct task_struct *thread;
+        unsigned long proc_nivcsw = 0;
+        unsigned long proc_nvcsw = 0;
 
-        global_tracker.tot_invctxt += task->nivcsw;
-        global_tracker.tot_vctxt += task->nvcsw;
+        thread = task;
+        do {
+            proc_nivcsw += thread->nivcsw;
+            proc_nvcsw += thread->nvcsw;
+        } while_each_thread(task, thread);
+
+        entry->ninvctxt = proc_nivcsw;
+        entry->nvctxt = proc_nvcsw;
+        global_tracker.tot_invctxt += proc_nivcsw;
+        global_tracker.tot_vctxt += proc_nvcsw;
     }
 
     if (copy_to_user(stats, &global_tracker, sizeof(struct pid_ctxt_switch)))
@@ -96,15 +103,13 @@ SYSCALL_DEFINE1(sys_fetch, struct pid_ctxt_switch __user *, stats){
 int sys_deregister(pid_t pid): searches the monitored process list for the sup
 plied PID and removes the corresponding node from the list
 */
-
-SYSCALL_DEFINE1(sys_deregister, pid_t, pid){
+SYSCALL_DEFINE1(deregister, pid_t, pid){
     if(pid < 1)
         return -EINVAL;
     struct pid_node *entry, *tmp;
 
     list_for_each_entry_safe(entry, tmp, &monitored_list, next_prev_list){
         if(entry->pid == pid){
-            // found it, now delete
             list_del(&entry->next_prev_list);
             kfree(entry);
             return 0;
