@@ -1,7 +1,7 @@
 # Task B: Context Switch Tracker
 
 ## Overview
-This task implements three custom system calls — `sys_register_pid` (452), `sys_fetch` (453), and `sys_deregister` (454) — that maintain a monitored process list and track cumulative voluntary and involuntary context switch events across registered processes and their threads.
+We implemented 3 custom system calls, `sys_register_pid` (452), `sys_fetch` (453), and `sys_deregister` (454), by maintaining a monitored process list and tracking cumulative voluntary and involuntary context switch events across registered processes and their threads.
 
 ## Modified Kernel Files
 
@@ -30,6 +30,7 @@ This task implements three custom system calls — `sys_register_pid` (452), `sy
 long sys_register_pid(pid_t pid);
 ```
 Adds the given PID to the tail of the monitored process list.
+NOTE: Had to use register_pid() instead of register() to avoid conflict with the standard library function.
 
 **Return Values:**
 - `0` — Success

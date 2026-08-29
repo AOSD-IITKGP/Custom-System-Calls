@@ -1,7 +1,7 @@
 # Task A: Process Information System Call
 
 ## Overview
-This task implements a custom system call `proc_info` (syscall number 451) that provides process-specific and system-wide information from the Linux kernel.
+We implemented a custom system call `proc_info` (#syscall number 451) that provides process-specific and system-wide information from the Linux kernel.
 
 ## Modified Kernel Files
 
@@ -29,41 +29,41 @@ long proc_info(pid_t pid, unsigned int flags, char __user *buffer, size_t size);
 ```
 
 ### Arguments
-- `pid`: PID of the target process (used in process-specific mode); set to 0 for system-wide mode
-- `flags`: Mode selector — `PROC_INFO_PID` (1) for process-specific, `PROC_INFO_SYSTEM` (2) for system-wide
-- `buffer`: User-space buffer to receive the formatted result string
-- `size`: Size of the user-space buffer
+1. pid: PID of the process in process-specific mode; set to 0 in system-wide mode.
+2. flags: mode selector as an unsigned integer.– Process-specific mode: PROC_INFO_PID– System-wide mode: PROC_INFO_SYSTEM
+3. buffer: a char buffer that will store the extracted fields. You have to store all the fields that are extracted in this buffer, and then parse the buffer in the wrapper function. The buffer should contain the fields in the above mentioned order.
+4. size: size of the user-space buffer.
 
 ### Return Values
-- `0` — Success
-- `-EINVAL` — Invalid flags or arguments
-- `-ESRCH` — No process found for the given PID
-- `-EFAULT` — Invalid user-space buffer address
-- `-ENOSPC` — Buffer too small
+1. 0: returned when the system call completes successfully and the requested fields are copied into buffer.
+2. EINVAL: returned when flags contains unsupported bits, when more than one mode is selected, or when the supplied arguments are invalid.
+3. ESRCH: returned when process-specific mode is selected and no process exists for the supplied pid.
+4. EFAULT: returned when buffer is not a valid user-space address or the kernel cannot copy data to it.
+5. ENOSPC: returned when size is too small to hold all fields in the required order.
 
 ## Modes
 
 ### Process-Specific Mode (PROC_INFO_PID)
-Returns the following fields (space-separated in buffer):
+Returns the following fields (note: space-separated in buffer):
 1. Parent Process ID
-2. State (numeric)
+2. State as a numeric value
 3. Effective Priority
-4. Scheduling Class (string, e.g., SCHED_NORMAL)
+4. Scheduling class as a String
 5. Number of Child Processes
 6. Number of Sibling Processes
 
 ### System-Wide Mode (PROC_INFO_SYSTEM)
-Returns the following fields (space-separated in buffer):
+Returns the following fields (note: space-separated in buffer):
 1. Total Number of Processes
-2. Processes in TASK_RUNNING state
-3. Processes in TASK_INTERRUPTIBLE state
-4. Processes in TASK_UNINTERRUPTIBLE state
-5. Processes in RT Class
-6. Processes in Fair Class
-7. Processes in CFS Runqueue
-8. PID of process with minimum vruntime
-9. Minimum vruntime value
-10. Total load on CFS Runqueue
+2. Number of Processes in TASK_RUNNING state
+3. Number of Processes in TASK_INTERRUPTIBLE state
+4. Number of Processes in TASK_UNINTERRUPTIBLE state
+5. Number of Processes in RT Class
+6. Number of Processes in Fair Class
+7. Number of Processes in CFS Runqueue
+8. PID of Process with Minimum Vruntime Value
+9. Minimum Vruntime Value
+10. Total Load on CFS Runqueue
 
 ## How to Use the Library
 
@@ -93,5 +93,5 @@ make
 - The syscall uses `pid_task(find_vpid(pid), PIDTYPE_PID)` to locate a process by PID
 - All data is formatted into a kernel buffer using `snprintf`, then safely copied to user space via `copy_to_user`
 - Child and sibling counts are obtained by iterating the `task->children` and `task->sibling` linked lists
-- System-wide mode uses `for_each_process()` to iterate all processes and collects scheduler statistics from `task->se` (the scheduling entity)
-- The `get_sched_class()` helper converts numeric scheduling policies to human-readable strings
+- System-wide mode iterates all processes and collects scheduler statistics from `task->se` (the scheduling entity)
+- The `get_sched_class()` helper converts numebers to strings

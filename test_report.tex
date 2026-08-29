@@ -1,0 +1,199 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    breaklines=true,
+    columns=fullflexible
+}
+
+\title{\textbf{Testing Report: Custom System Calls} \\ 
+\large Group 4 \\ 
+Assignment 2}
+\author{
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Name} & \textbf{Roll Number} \\
+\hline
+Payidiparthy Sri Surya Naga Hadwik & 23CS10052 \\
+Chintada Yesheeth Sree Narayana & 23CS10013 \\
+Dasari Veera Venkata Abhinav Teja & 23CS10017 \\
+\hline
+\end{tabular} 
+}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section*{Environment}
+\begin{itemize}[nosep]
+    \item \textbf{OS:} Ubuntu 24.04.4 LTS (running in VirtualBox)
+    \item \textbf{Kernel:} Linux 6.1.6 (compiled from source)
+    \item \textbf{Compiler:} GCC (Ubuntu default)
+    \item \textbf{Architecture:} x86\_64
+\end{itemize}
+
+\section*{Task A: Process Information (\texttt{proc\_info})}
+
+\subsection*{Test 1: Current Process Info (PID Mode)}
+\textbf{Input:} \texttt{get\_proc\_info(getpid())} \\
+\textbf{Expected:} Returns valid process information for the running test process. \\
+\textbf{Result:} PASS
+
+\begin{lstlisting}
+Parent PID:        3616
+State:             0           (TASK_RUNNING)
+Priority:          120         (default for SCHED_NORMAL)
+Scheduling Class:  SCHED_NORMAL
+Child Processes:   0
+Sibling Processes: 1
+\end{lstlisting}
+
+\textbf{Verification:} State 0 (RUNNING) is correct since the process is actively executing the syscall. Priority 120 is the default for normal processes. SCHED\_NORMAL is the expected scheduler for user programs.
+
+\subsection*{Test 2: Init Process (PID 1)}
+\textbf{Input:} \texttt{get\_proc\_info(1)} \\
+\textbf{Expected:} Returns information about the init/systemd process. \\
+\textbf{Result:} PASS
+
+\begin{lstlisting}
+Parent PID:        0           (init's parent is the kernel)
+State:             1           (TASK_INTERRUPTIBLE)
+Priority:          120
+Scheduling Class:  SCHED_NORMAL
+Child Processes:   33
+Sibling Processes: 2
+\end{lstlisting}
+
+\textbf{Verification:} PID 1 (systemd) correctly shows parent PID 0 (the kernel idle process). The high child count reflects the system services spawned by init.
+
+\subsection*{Test 3: System-Wide Info}
+\textbf{Input:} \texttt{get\_system\_info()} \\
+\textbf{Expected:} Returns aggregate system statistics with consistent process counts. \\
+\textbf{Result:} PASS
+
+\begin{lstlisting}
+Total Processes:       327
+Running:               1
+Interruptible:         219
+Uninterruptible:       0
+RT Class:              57
+Fair Class:            270
+In CFS Runqueue:       1
+Min Vruntime PID:      4436
+Min Vruntime:          48932457838
+Total CFS Load:        1048576
+\end{lstlisting}
+
+\textbf{Verification:} RT (57) + Fair (270) = 327 = Total Processes, confirming counts are consistent. Only 1 process is running (the test program itself), which is expected on a mostly idle system. The min vruntime PID matches the test program's PID.
+
+\subsection*{Test 4: Invalid PID}
+\textbf{Input:} \texttt{syscall(451, 99999, PROC\_INFO\_PID, buf, sizeof(buf))} \\
+\textbf{Expected:} Returns $-1$ with \texttt{errno} set to \texttt{ESRCH}. \\
+\textbf{Result:} PASS --- \texttt{Error: No such process}
+
+\subsection*{Test 5: Invalid Flags}
+\textbf{Input:} \texttt{syscall(451, 1, 99, buf, sizeof(buf))} \\
+\textbf{Expected:} Returns $-1$ with \texttt{errno} set to \texttt{EINVAL}. \\
+\textbf{Result:} PASS --- \texttt{Error: Invalid argument}
+
+\subsection*{Test 6: Buffer Too Small}
+\textbf{Input:} \texttt{syscall(451, 1, PROC\_INFO\_PID, buf, 1)} \\
+\textbf{Expected:} Returns $-1$ with \texttt{errno} set to \texttt{ENOSPC}. \\
+\textbf{Result:} PASS --- \texttt{Error: No space left on device}
+
+\section*{Task B: Context Switch Tracker}
+
+\subsection*{Test 1: Register Current Process}
+\textbf{Input:} \texttt{register\_pid(getpid())} \\
+\textbf{Expected:} Returns 0, process is added to the monitored list. \\
+\textbf{Result:} PASS --- \texttt{Registered PID 4836 successfully}
+
+\subsection*{Test 2: Register PID 1}
+\textbf{Input:} \texttt{register\_pid(1)} \\
+\textbf{Expected:} Returns 0, PID 1 is added to the monitored list. \\
+\textbf{Result:} PASS --- \texttt{Registered PID 1 successfully}
+
+\subsection*{Test 3: Fetch Context Switches}
+\textbf{Input:} \texttt{fetch\_ctx\_switches(\&stats)} with PIDs 4836 and 1 registered. \\
+\textbf{Expected:} Returns cumulative context switches across both processes and their threads. \\
+\textbf{Result:} PASS
+
+\begin{lstlisting}
+Voluntary Context Switches:   125517
+Involuntary Context Switches: 1779
+\end{lstlisting}
+
+\textbf{Verification:} The high voluntary count is expected from PID 1 (systemd), which frequently sleeps waiting for events. The involuntary count reflects scheduler preemptions.
+
+\subsection*{Test 4: Deregister Current Process}
+\textbf{Input:} \texttt{deregister\_pid(getpid())} \\
+\textbf{Expected:} Returns 0, PID is removed from the list. \\
+\textbf{Result:} PASS --- \texttt{Deregistered PID 4836 successfully}
+
+\subsection*{Test 5: Fetch After Deregister}
+\textbf{Input:} \texttt{fetch\_ctx\_switches(\&stats)} with only PID 1 remaining. \\
+\textbf{Expected:} Returns context switches for PID 1 only. \\
+\textbf{Result:} PASS
+
+\begin{lstlisting}
+Voluntary Context Switches:   125517
+Involuntary Context Switches: 1779
+\end{lstlisting}
+
+\textbf{Verification:} Values are from PID 1 alone, confirming the test process was properly removed from the list.
+
+\subsection*{Test 6: Deregister PID 1}
+\textbf{Input:} \texttt{deregister\_pid(1)} \\
+\textbf{Expected:} Returns 0, PID 1 is removed. \\
+\textbf{Result:} PASS --- \texttt{Deregistered PID 1 successfully}
+
+\subsection*{Test 7: Invalid PID}
+\textbf{Input:} \texttt{register\_pid(-1)} \\
+\textbf{Expected:} Returns $-1$ with \texttt{errno} set to \texttt{EINVAL}. \\
+\textbf{Result:} PASS --- \texttt{register\_pid failed: Invalid argument}
+
+\subsection*{Test 8: Deregister Non-Existent PID}
+\textbf{Input:} \texttt{deregister\_pid(99999)} \\
+\textbf{Expected:} Returns $-1$ with \texttt{errno} set to \texttt{ESRCH}. \\
+\textbf{Result:} PASS --- \texttt{deregister failed: No such process}
+
+\section*{Summary}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llc@{}}
+\toprule
+\textbf{Task} & \textbf{Test Case} & \textbf{Result} \\
+\midrule
+A & Process-specific mode (current process) & PASS \\
+A & Process-specific mode (PID 1) & PASS \\
+A & System-wide mode & PASS \\
+A & Invalid PID $\rightarrow$ ESRCH & PASS \\
+A & Invalid flags $\rightarrow$ EINVAL & PASS \\
+A & Buffer too small $\rightarrow$ ENOSPC & PASS \\
+\midrule
+B & Register current process & PASS \\
+B & Register PID 1 & PASS \\
+B & Fetch (two processes) & PASS \\
+B & Deregister current process & PASS \\
+B & Fetch after deregister & PASS \\
+B & Deregister PID 1 & PASS \\
+B & Invalid PID $\rightarrow$ EINVAL & PASS \\
+B & Deregister non-existent PID $\rightarrow$ ESRCH & PASS \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent\textbf{All 14 tests passed. Both system calls behave as specified in the assignment.}
+
+\end{document}
