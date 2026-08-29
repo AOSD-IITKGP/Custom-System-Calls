@@ -24,29 +24,33 @@ The system call shall verify that the PID is valid and that the corresponding pr
 */
 SYSCALL_DEFINE1(register_pid, pid_t, pid)
 {
-    if(pid < 1)
-        return -EINVAL;
+    if(pid < 1) return -EINVAL;
 
     struct task_struct *task;
     task = pid_task(find_vpid(pid), PIDTYPE_PID);
     
-    if(!task)
-        return -ESRCH;
+    if(!task) return -ESRCH;
 
-    // create new node for this pid and update the fields
-    struct pid_node* new_node = kmalloc(sizeof(struct pid_node), GFP_KERNEL);
-    if (!new_node)
-        return -ENOSPC;
+    // 1. Check if PID is already registered to avoid duplicate entries
+    struct pid_node *entry;
+    list_for_each_entry(entry, &monitored_list, next_prev_list) {
+        if (entry->pid == pid)
+            return -EEXIST; // PID is already in the list
+    }
 
+    // 2. Allocate and initialize the new node
+    struct pid_node *new_node = kmalloc(sizeof(struct pid_node), GFP_KERNEL);
+    if(!new_node) return -ENOSPC; 
     new_node->pid = pid;
-    new_node->ninvctxt = task -> nivcsw;
-    new_node->nvctxt = task -> nvcsw;
+    new_node->ninvctxt = task->nivcsw;
+    new_node->nvctxt = task->nvcsw;
 
-    // add the above as tail to the list
+    // 3. Add to the tail of the list
     list_add_tail(&new_node->next_prev_list, &monitored_list);
 
     return 0;
 }
+
 
 /*
 int sys_fetch(struct pid_ctxt_switch *stats): iterates through the monitored process list and obtains the cumulative number of voluntary 

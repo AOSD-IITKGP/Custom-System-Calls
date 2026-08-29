@@ -78,6 +78,11 @@ int main()
     printf("\n=== Test 14: Double deregister ===\n");
     deregister_pid(my_pid);
 
+    printf("\n=== Test 15: Double register (Duplicate PID) ===\n");
+    register_pid(my_pid);
+    register_pid(my_pid);  // Expected to fail with errno = EEXIST
+    deregister_pid(my_pid); // Clean up
+
     // wait for children to finish
     waitpid(child1, NULL, 0);
     waitpid(child2, NULL, 0);
