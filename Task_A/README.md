@@ -29,41 +29,66 @@ long proc_info(pid_t pid, unsigned int flags, char __user *buffer, size_t size);
 ```
 
 ### Arguments
-1. pid: PID of the process in process-specific mode; set to 0 in system-wide mode.
-2. flags: mode selector as an unsigned integer.– Process-specific mode: PROC_INFO_PID– System-wide mode: PROC_INFO_SYSTEM
-3. buffer: a char buffer that will store the extracted fields. You have to store all the fields that are extracted in this buffer, and then parse the buffer in the wrapper function. The buffer should contain the fields in the above mentioned order.
-4. size: size of the user-space buffer.
+1. `pid`: PID of the process in process-specific mode; set to 0 in system-wide mode.
+2. `flags`: Mode selector as an unsigned integer:
+   - Process-specific mode: `PROC_INFO_PID` (1)
+   - System-wide mode: `PROC_INFO_SYSTEM` (2)
+3. `buffer`: A char buffer that will store the extracted fields formatted as a space-separated string.
+4. `size`: Size of the user-space buffer.
 
 ### Return Values
-1. 0: returned when the system call completes successfully and the requested fields are copied into buffer.
-2. EINVAL: returned when flags contains unsupported bits, when more than one mode is selected, or when the supplied arguments are invalid.
-3. ESRCH: returned when process-specific mode is selected and no process exists for the supplied pid.
-4. EFAULT: returned when buffer is not a valid user-space address or the kernel cannot copy data to it.
-5. ENOSPC: returned when size is too small to hold all fields in the required order.
+1. `0`: Returned when the system call completes successfully and the requested fields are copied into `buffer`.
+2. `-EINVAL`: Returned when `flags` contains unsupported bits/values, or when supplied arguments are invalid.
+3. `-ESRCH`: Returned when process-specific mode is selected and no process exists for the supplied `pid`.
+4. `-EFAULT`: Returned when `buffer` is not a valid user-space address or `copy_to_user` fails.
+5. `-ENOSPC`: Returned when `size` is too small to hold all formatted fields.
+
+---
 
 ## Modes
 
-### Process-Specific Mode (PROC_INFO_PID)
-Returns the following fields (note: space-separated in buffer):
-1. Parent Process ID
-2. State as a numeric value
-3. Effective Priority
-4. Scheduling class as a String
-5. Number of Child Processes
-6. Number of Sibling Processes
+### Process-Specific Mode (`PROC_INFO_PID`)
+Returns the following fields (space-separated):
+1. Parent Process ID (`task->parent->pid`)
+2. State as a numeric value (`task->__state`)
+3. Effective Priority (`task->prio`)
+4. Scheduling class as a String (`get_sched_class(task->policy)`)
+5. Number of Child Processes (`task->children`)
+6. Number of Sibling Processes (`task->sibling`)
 
-### System-Wide Mode (PROC_INFO_SYSTEM)
-Returns the following fields (note: space-separated in buffer):
+### System-Wide Mode (`PROC_INFO_SYSTEM`)
+Returns the following fields (space-separated):
 1. Total Number of Processes
-2. Number of Processes in TASK_RUNNING state
-3. Number of Processes in TASK_INTERRUPTIBLE state
-4. Number of Processes in TASK_UNINTERRUPTIBLE state
+2. Number of Processes in `TASK_RUNNING` state
+3. Number of Processes in `TASK_INTERRUPTIBLE` state
+4. Number of Processes in `TASK_UNINTERRUPTIBLE` state
 5. Number of Processes in RT Class
 6. Number of Processes in Fair Class
 7. Number of Processes in CFS Runqueue
 8. PID of Process with Minimum Vruntime Value
 9. Minimum Vruntime Value
 10. Total Load on CFS Runqueue
+
+---
+
+## Design Choices & Implementation Details
+
+### 1. Scheduling Class Classification
+- **Fair Class (`n_fair`)**: Categorizes `SCHED_NORMAL`, `SCHED_BATCH`, and `SCHED_IDLE`. In the Linux kernel, processes assigned `SCHED_IDLE` are scheduled under the CFS scheduler (`fair_sched_class`) with a minimal priority weight (`WEIGHT_IDLEPRIO = 3`), maintain `vruntime`, and reside in CFS runqueues.
+- **Real-Time Class (`n_rt`)**: Categorizes `SCHED_FIFO`, `SCHED_RR`, and `SCHED_DEADLINE`. Grouping `SCHED_DEADLINE` under real-time captures all deadline-driven real-time tasks alongside POSIX real-time tasks, ensuring complete coverage such that:
+  $$\text{n\_rt} + \text{n\_fair} = \text{total\_procs}$$
+
+### 2. Multi-Core CFS Aggregation
+- In Linux SMP systems, each CPU core maintains its own dedicated `cfs_rq` to eliminate global lock contention.
+- The syscall iterates over all global processes via `for_each_process(task)`. For every runnable CFS task (`task->se.on_rq`), it aggregates `task->se.load.weight` into `total_load` (the system-wide CFS capacity demand) and tracks the global minimum `vruntime` across all cores.
+
+### 3. Kernel Process State Tracking
+- Linux kernel 5.14+ replaced `task->state` with `task->__state`. The implementation checks `task->__state` to accurately count `TASK_RUNNING`, `TASK_INTERRUPTIBLE`, and `TASK_UNINTERRUPTIBLE` processes.
+
+### 4. Single Buffer Kernel-to-Userspace Transfer
+- Instead of multiple syscalls or individual struct field copies, all extracted fields are formatted into a single 2048-byte kernel buffer using `snprintf()` and transferred via a single `copy_to_user()` call. Userspace wrapper functions then parse this string into respective variables.
+
+---
 
 ## How to Use the Library
 
@@ -82,16 +107,9 @@ get_proc_info(1234);
 get_system_info();
 ```
 
-### Step 3: Compile and run (must be on kernel 6.1.6)
+### Step 3: Compile and run
 ```bash
 cd userspace/tests
 make
 ./test
 ```
-
-## Design Details
-- The syscall uses `pid_task(find_vpid(pid), PIDTYPE_PID)` to locate a process by PID
-- All data is formatted into a kernel buffer using `snprintf`, then safely copied to user space via `copy_to_user`
-- Child and sibling counts are obtained by iterating the `task->children` and `task->sibling` linked lists
-- System-wide mode iterates all processes and collects scheduler statistics from `task->se` (the scheduling entity)
-- The `get_sched_class()` helper converts numebers to strings
