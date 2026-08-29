@@ -116,56 +116,102 @@ Total CFS Load:        1048576
 \subsection*{Test 1: Register Current Process}
 \textbf{Input:} \texttt{register\_pid(getpid())} \\
 \textbf{Expected:} Returns 0, process is added to the monitored list. \\
-\textbf{Result:} PASS --- \texttt{Registered PID 4836 successfully}
+\textbf{Result:} PASS --- \texttt{Registered PID 3859 successfully}
 
-\subsection*{Test 2: Register PID 1}
+\subsection*{Test 2: Register PID 1 (systemd)}
 \textbf{Input:} \texttt{register\_pid(1)} \\
 \textbf{Expected:} Returns 0, PID 1 is added to the monitored list. \\
 \textbf{Result:} PASS --- \texttt{Registered PID 1 successfully}
 
-\subsection*{Test 3: Fetch Context Switches}
-\textbf{Input:} \texttt{fetch\_ctx\_switches(\&stats)} with PIDs 4836 and 1 registered. \\
-\textbf{Expected:} Returns cumulative context switches across both processes and their threads. \\
+\subsection*{Test 3: Register Child Processes}
+\textbf{Input:} Two child processes spawned via \texttt{fork()}; both registered with \texttt{register\_pid()}. \\
+\textbf{Expected:} Returns 0 for both, children are added to the monitored list. \\
+\textbf{Result:} PASS --- \texttt{Registered PID 3860 successfully}, \texttt{Registered PID 3861 successfully}
+
+\subsection*{Test 4: Fetch with 4 Processes Monitored}
+\textbf{Input:} \texttt{fetch\_ctx\_switches(\&stats)} with PIDs 3859, 1, 3860, 3861 registered. \\
+\textbf{Expected:} Returns cumulative context switches across all four processes and their threads. \\
 \textbf{Result:} PASS
 
 \begin{lstlisting}
-Voluntary Context Switches:   125517
-Involuntary Context Switches: 1779
+Voluntary Context Switches:   65097
+Involuntary Context Switches: 2523
 \end{lstlisting}
 
-\textbf{Verification:} The high voluntary count is expected from PID 1 (systemd), which frequently sleeps waiting for events. The involuntary count reflects scheduler preemptions.
+\textbf{Verification:} The high voluntary count is largely contributed by PID 1 (systemd), which frequently sleeps waiting for events. The child processes contribute additional switches from their busy work and \texttt{usleep()} calls.
 
-\subsection*{Test 4: Deregister Current Process}
-\textbf{Input:} \texttt{deregister\_pid(getpid())} \\
-\textbf{Expected:} Returns 0, PID is removed from the list. \\
-\textbf{Result:} PASS --- \texttt{Deregistered PID 4836 successfully}
+\subsection*{Test 5: Deregister Child 1}
+\textbf{Input:} \texttt{deregister\_pid(3860)} \\
+\textbf{Expected:} Returns 0, child is removed from the list. \\
+\textbf{Result:} PASS --- \texttt{Deregistered PID 3860 successfully}
 
-\subsection*{Test 5: Fetch After Deregister}
+\subsection*{Test 6: Fetch with 3 Processes Monitored}
+\textbf{Input:} \texttt{fetch\_ctx\_switches(\&stats)} with PIDs 3859, 1, 3861 remaining. \\
+\textbf{Expected:} Lower cumulative count after removing one child. \\
+\textbf{Result:} PASS
+
+\begin{lstlisting}
+Voluntary Context Switches:   65086
+Involuntary Context Switches: 2520
+\end{lstlisting}
+
+\textbf{Verification:} Both counts decreased compared to Test 4 (voluntary: 65097 $\rightarrow$ 65086, involuntary: 2523 $\rightarrow$ 2520), confirming PID 3860's contribution was removed.
+
+\subsection*{Test 7: Deregister Child 2}
+\textbf{Input:} \texttt{deregister\_pid(3861)} \\
+\textbf{Expected:} Returns 0, child is removed from the list. \\
+\textbf{Result:} PASS --- \texttt{Deregistered PID 3861 successfully}
+
+\subsection*{Test 8: Fetch with 2 Processes Monitored}
+\textbf{Input:} \texttt{fetch\_ctx\_switches(\&stats)} with PIDs 3859 and 1 remaining. \\
+\textbf{Expected:} Further decrease after removing second child. \\
+\textbf{Result:} PASS
+
+\begin{lstlisting}
+Voluntary Context Switches:   65075
+Involuntary Context Switches: 2519
+\end{lstlisting}
+
+\textbf{Verification:} Counts decreased again (voluntary: 65086 $\rightarrow$ 65075, involuntary: 2520 $\rightarrow$ 2519), confirming PID 3861's contribution was removed.
+
+\subsection*{Test 9: Deregister Current Process}
+\textbf{Input:} \texttt{deregister\_pid(3859)} \\
+\textbf{Expected:} Returns 0, current process is removed from the list. \\
+\textbf{Result:} PASS --- \texttt{Deregistered PID 3859 successfully}
+
+\subsection*{Test 10: Fetch with Only PID 1}
 \textbf{Input:} \texttt{fetch\_ctx\_switches(\&stats)} with only PID 1 remaining. \\
-\textbf{Expected:} Returns context switches for PID 1 only. \\
+\textbf{Expected:} Returns context switches for PID 1 alone. \\
 \textbf{Result:} PASS
 
 \begin{lstlisting}
-Voluntary Context Switches:   125517
-Involuntary Context Switches: 1779
+Voluntary Context Switches:   65074
+Involuntary Context Switches: 2519
 \end{lstlisting}
 
-\textbf{Verification:} Values are from PID 1 alone, confirming the test process was properly removed from the list.
+\textbf{Verification:} Voluntary count dropped by 1 (65075 $\rightarrow$ 65074), confirming the test process was properly removed. The clear downward trend across Tests 4, 6, 8, and 10 validates that \texttt{deregister} correctly removes processes from the monitored list.
 
-\subsection*{Test 6: Deregister PID 1}
+\subsection*{Test 11: Deregister PID 1}
 \textbf{Input:} \texttt{deregister\_pid(1)} \\
 \textbf{Expected:} Returns 0, PID 1 is removed. \\
 \textbf{Result:} PASS --- \texttt{Deregistered PID 1 successfully}
 
-\subsection*{Test 7: Invalid PID}
+\subsection*{Test 12: Invalid PID}
 \textbf{Input:} \texttt{register\_pid(-1)} \\
 \textbf{Expected:} Returns $-1$ with \texttt{errno} set to \texttt{EINVAL}. \\
 \textbf{Result:} PASS --- \texttt{register\_pid failed: Invalid argument}
 
-\subsection*{Test 8: Deregister Non-Existent PID}
+\subsection*{Test 13: Deregister Non-Existent PID}
 \textbf{Input:} \texttt{deregister\_pid(99999)} \\
 \textbf{Expected:} Returns $-1$ with \texttt{errno} set to \texttt{ESRCH}. \\
 \textbf{Result:} PASS --- \texttt{deregister failed: No such process}
+
+\subsection*{Test 14: Double Deregister}
+\textbf{Input:} \texttt{deregister\_pid(3859)} (already deregistered in Test 9). \\
+\textbf{Expected:} Returns $-1$ with \texttt{errno} set to \texttt{ESRCH}. \\
+\textbf{Result:} PASS --- \texttt{deregister failed: No such process}
+
+\textbf{Verification:} Confirms that a PID cannot be deregistered twice, and the list correctly reflects prior removals.
 
 \section*{Summary}
 
@@ -184,16 +230,19 @@ A & Buffer too small $\rightarrow$ ENOSPC & PASS \\
 \midrule
 B & Register current process & PASS \\
 B & Register PID 1 & PASS \\
-B & Fetch (two processes) & PASS \\
-B & Deregister current process & PASS \\
-B & Fetch after deregister & PASS \\
+B & Register child processes & PASS \\
+B & Fetch (4 processes monitored) & PASS \\
+B & Deregister child 1, fetch (3 monitored) & PASS \\
+B & Deregister child 2, fetch (2 monitored) & PASS \\
+B & Deregister self, fetch (1 monitored) & PASS \\
 B & Deregister PID 1 & PASS \\
 B & Invalid PID $\rightarrow$ EINVAL & PASS \\
 B & Deregister non-existent PID $\rightarrow$ ESRCH & PASS \\
+B & Double deregister $\rightarrow$ ESRCH & PASS \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\noindent\textbf{All 14 tests passed. Both system calls behave as specified in the assignment.}
+\noindent\textbf{All 17 tests passed.}
 
 \end{document}
