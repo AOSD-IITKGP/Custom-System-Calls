@@ -81,6 +81,7 @@ SYSCALL_DEFINE1(fetch, struct pid_ctxt_switch __user *, stats)
         unsigned long proc_nivcsw = 0;
         unsigned long proc_nvcsw = 0;
 
+        // Fix done by Hadwik
         thread = task;
         do {
             proc_nivcsw += thread->nivcsw;
@@ -93,6 +94,7 @@ SYSCALL_DEFINE1(fetch, struct pid_ctxt_switch __user *, stats)
         global_tracker.tot_vctxt += proc_nvcsw;
     }
 
+    // send this to user struct
     if (copy_to_user(stats, &global_tracker, sizeof(struct pid_ctxt_switch)))
         return -EFAULT;
 
@@ -108,7 +110,8 @@ SYSCALL_DEFINE1(deregister, pid_t, pid){
         return -EINVAL;
     struct pid_node *entry, *tmp;
 
-    list_for_each_entry_safe(entry, tmp, &monitored_list, next_prev_list){
+    // loop through it and delete the pid safely*
+    list_for_each_entry_safe(entry, tmp, &monitored_list, next_prev_list){ // tmp helps to keep track of next block once we remove the current block
         if(entry->pid == pid){
             list_del(&entry->next_prev_list);
             kfree(entry);

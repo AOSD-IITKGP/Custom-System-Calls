@@ -5,3 +5,4 @@ linux-6.1.6.tar.xz
 *.mod
 *.cmd
 .tmp_versions/
+.vscode/
